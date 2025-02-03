@@ -14,9 +14,6 @@ pub enum RegisterTeamResult {
     Err(RegistrationError),
 }
 
-// pub enum ErrorMessage {
-//     ConnectionError(Error),
-// }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum RegistrationError {
@@ -25,6 +22,21 @@ pub enum RegistrationError {
     InvalidRegistrationToken,
     TooManyPlayers,
 }
+
+use std::fmt;
+
+impl fmt::Display for RegistrationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RegistrationError::AlreadyRegistered => write!(f, "Team already registered"),
+            RegistrationError::InvalidName => write!(f, "Invalid team name"),
+            RegistrationError::InvalidRegistrationToken => write!(f, "Invalid registration token"),
+            RegistrationError::TooManyPlayers => write!(f, "Too many players in the team"),
+        }
+    }
+}
+
+impl Error for RegistrationError {}
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum Message {
