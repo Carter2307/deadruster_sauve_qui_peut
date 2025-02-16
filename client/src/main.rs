@@ -1,8 +1,9 @@
 use std::thread;
 
 use shared::{
+    base64::{decode, encode},
     enums::RegisterTeamResult,
-    functions::{register_player, register_team}, radar_view::{decode_radarview, encode_radarview},
+    functions::{register_player, register_team},
 };
 
 const SERVER_ADDRESS: &str = "localhost:8778";
@@ -53,35 +54,10 @@ const SERVER_ADDRESS: &str = "localhost:8778";
 //     }
 // }
 
-
-
-
-
-
 fn main() {
-    // Exemple de chaîne encodée (doit être valide selon ton cas d'utilisation)
-    let encoded = "ieysGjGO8papd/a"; 
+    let encoded = encode(b"Hello, World!");
+    println!("Encoded: {}", encoded);
 
-    match decode_radarview(&encoded) {
-        Ok((h_passages, v_passages, cells)) => {
-            println!("Décodage réussi !");
-            println!("Passages horizontaux : {:?}", h_passages);
-            println!("Passages verticaux   : {:?}", v_passages);
-            println!("Cellules             : {:?}", cells);
-
-            // Test de ré-encodage
-            match encode_radarview(&h_passages, &v_passages, &cells) {
-                Ok(re_encoded) => {
-                    println!("Ré-encodage réussi : {}", re_encoded);
-                    if re_encoded == encoded {
-                        println!("✅ Test validé : l'encodage est réversible !");
-                    } else {
-                        println!("❌ Problème : l'encodage donne un résultat différent.");
-                    }
-                }
-                Err(e) => println!("Erreur d'encodage : {:?}", e),
-            }
-        }
-        Err(e) => println!("Erreur de décodage : {:?}", e),
-    }
+    let decoded = decode(&encoded).unwrap();
+    println!("Decoded: {:?}", String::from_utf8(decoded).unwrap());
 }
