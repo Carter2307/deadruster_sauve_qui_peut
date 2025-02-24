@@ -5,11 +5,17 @@ version = 3
 [[package]]
 name = "algorithms"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "shared",
+]
 
 [[package]]
 name = "client"
 version = "0.1.0"
 dependencies = [
+ "algorithms",
  "serde",
  "serde_json",
  "shared",

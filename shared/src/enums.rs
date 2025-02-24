@@ -3,6 +3,7 @@ use std::error::Error;
 use serde::{Deserialize, Serialize};
 
 use crate::structs::{RegisterTeam, SubscribePlayer};
+use crate::structs::{MazeData, Position};
 
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -32,7 +33,12 @@ pub enum Message {
     RegisterTeamResult(RegisterTeamResult),
     SubscribePlayer(SubscribePlayer),
     SubscribePlayerResult(SubscribePlayerResult),
+    RequestMaze,
+    MazeResponse(MazeData),
+    SolveMaze(MazeData),
+    MazeSolution(Vec<Position>),
 }
+
 
 
 #[derive(Deserialize, Serialize, Debug)]
