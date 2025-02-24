@@ -1,6 +1,3 @@
-//use crate::base64::{decode, encode};
-use std::error::Error;
-use std::io::{Cursor, Read, Write};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WallState {
