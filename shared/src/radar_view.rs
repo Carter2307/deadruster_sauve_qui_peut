@@ -1,60 +1,104 @@
-use base64::{decode, encode};
+//use crate::base64::{decode, encode};
 use std::error::Error;
 use std::io::{Cursor, Read, Write};
 
-pub fn decode_radarview(encoded_str: &str) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), Box<dyn Error>> {
-    let raw_bytes = decode(encoded_str)?;
-    let mut cursor = Cursor::new(&raw_bytes);
-
-    let mut h_bytes = [0u8; 3];
-    cursor.read_exact(&mut h_bytes)?;
-    let h_passages = u32::from_le_bytes([h_bytes[0], h_bytes[1], h_bytes[2], 0]);
-    let h_bits: Vec<u8> = (0..12)
-        .map(|i| ((h_passages >> (2 * i)) & 0b11) as u8)
-        .collect();
-
-    let mut v_bytes = [0u8; 3];
-    cursor.read_exact(&mut v_bytes)?;
-    let v_passages = u32::from_le_bytes([v_bytes[0], v_bytes[1], v_bytes[2], 0]);
-    let v_bits: Vec<u8> = (0..12)
-        .map(|i| ((v_passages >> (2 * i)) & 0b11) as u8)
-        .collect();
-
-    let mut cell_bytes = [0u8; 5];
-    cursor.read_exact(&mut cell_bytes)?;
-    let cells: Vec<u8> = (0..9)
-        .map(|i| ((cell_bytes[i / 2] >> ((i % 2) * 4)) & 0x0F) as u8)
-        .collect();
-
-    Ok((h_bits, v_bits, cells))
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum WallState {
+    Undefined,
+    Open,
+    Wall,
 }
 
-pub fn encode_radarview(
-    h_passages: &[u8],
-    v_passages: &[u8],
-    cells: &[u8],
-) -> Result<String, Box<dyn Error>> {
-    let mut buffer = Vec::new();
-
-    let h_value: u32 = h_passages
-        .iter()
-        .enumerate()
-        .map(|(i, &val)| (val as u32) << (2 * i))
-        .sum();
-    buffer.write_all(&h_value.to_le_bytes()[..3])?;
-
-    let v_value: u32 = v_passages
-        .iter()
-        .enumerate()
-        .map(|(i, &val)| (val as u32) << (2 * i))
-        .sum();
-    buffer.write_all(&v_value.to_le_bytes()[..3])?;
-
-    let mut cell_bytes = [0u8; 5];
-    for (i, &cell) in cells.iter().enumerate() {
-        cell_bytes[i / 2] |= (cell & 0x0F) << ((i % 2) * 4);
+impl WallState {
+    fn from_bits(bits: u8) -> Result<Self, &'static str> {
+        match bits {
+            0 => Ok(WallState::Undefined),
+            1 => Ok(WallState::Open),
+            2 => Ok(WallState::Wall),
+            _ => Err("Invalid wall state bits"),
+        }
     }
-    buffer.write_all(&cell_bytes)?;
 
-    Ok(encode(&buffer))
+    fn to_bits(&self) -> u8 {
+        match self {
+            WallState::Undefined => 0,
+            WallState::Open => 1,
+            WallState::Wall => 2,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Element {
+    None,
+    Clue,
+    Target,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Entity {
+    None,
+    Ally,
+    Enemy,
+    Monster,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum RadarItem {
+    Valid { element: Element, entity: Entity },
+    Invalid,
+}
+
+impl RadarItem {
+    fn from_bits(bits: u8) -> Result<Self, &'static str> {
+        if bits == 0b1111 {
+            return Ok(RadarItem::Invalid);
+        }
+        let element_bits = (bits >> 2) & 0b11;
+        let entity_bits = bits & 0b11;
+
+        let element = match element_bits {
+            0b00 => Element::None,
+            0b01 => Element::Clue,
+            0b10 => Element::Target,
+            _ => return Err("Invalid element bits"),
+        };
+
+        let entity = match entity_bits {
+            0b00 => Entity::None,
+            0b01 => Entity::Ally,
+            0b10 => Entity::Enemy,
+            0b11 => Entity::Monster,
+            _ => unreachable!(),
+        };
+
+        Ok(RadarItem::Valid { element, entity })
+    }
+
+    fn to_bits(&self) -> u8 {
+        match self {
+            RadarItem::Invalid => 0b1111,
+            RadarItem::Valid { element, entity } => {
+                let element_bits = match element {
+                    Element::None => 0b00,
+                    Element::Clue => 0b01,
+                    Element::Target => 0b10,
+                };
+                let entity_bits = match entity {
+                    Entity::None => 0b00,
+                    Entity::Ally => 0b01,
+                    Entity::Enemy => 0b10,
+                    Entity::Monster => 0b11,
+                };
+                (element_bits << 2) | entity_bits
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct RadarView {
+    pub horizontal: Vec<WallState>,
+    pub vertical: Vec<WallState>,
+    pub cells: Vec<RadarItem>,
 }
