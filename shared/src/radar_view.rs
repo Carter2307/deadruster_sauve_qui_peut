@@ -99,3 +99,82 @@ pub struct RadarView {
     pub vertical: Vec<WallState>,
     pub cells: Vec<RadarItem>,
 }
+
+// DÉCODEUR
+fn decode(encoded: &str) -> Result<Vec<u8>, &'static str> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    let bytes = STANDARD.decode(encoded).map_err(|_| "Invalid base64 string")?;
+    Ok(bytes)
+}
+fn decode_walls(bytes: &[u8], expected_count: usize) -> Result<Vec<WallState>, &'static str> {
+    if bytes.len() != 3 {
+        return Err("Invalid wall bytes length");
+    }
+
+    // Le ">> 8" décale des bits vers la droite
+    // Le Décalage à droite (>> n) : Ajoute n zéros à gauche et supprime n bits à droite.
+    // Le Décalage à gauche (<< n) : Ajoute n zéros à droite et supprime n bits à gauche.
+    // En gros le décalage permet de supprimer le padding à la fin
+    let combined = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0]);
+
+    //print!("{:08b} \n", &combined);
+
+    let mut walls = Vec::with_capacity(expected_count);
+    for i in 0..expected_count {
+        let shift = 22 - i * 2;
+        let two_bits = ((combined >> shift) & 0b11) as u8;
+
+        //print!("{:02b} \n", &two_bits);
+
+        let wall = WallState::from_bits(two_bits)?;
+        walls.push(wall);
+    }
+
+    Ok(walls)
+}
+
+fn decode_cells(bytes: &[u8]) -> Result<Vec<RadarItem>, &'static str> {
+    if bytes.len() != 5 {
+        return Err("Invalid cell bytes length");
+    }
+
+    let mut cells = Vec::with_capacity(9);
+
+    for &byte in bytes.iter() {
+        let high = (byte >> 4) & 0x0F; // 4 bits de gauche
+        let low = byte & 0x0F;         // 4 bits de droite
+
+        cells.push(RadarItem::from_bits(high)?);
+        cells.push(RadarItem::from_bits(low)?);
+    }
+
+    // Supprimer le padding final si nécessaire
+    if cells.len() > 9 {
+        cells.truncate(9);
+    }
+
+
+    Ok(cells)
+}
+
+pub fn decode_radarview(encoded: &str) -> Result<RadarView, &'static str> {
+    let bytes = decode(encoded)?;
+    // for byte in &bytes {
+    //     print!("{:08b} \n", &byte);
+    // }
+
+    if bytes.len() != 11 {
+        return Err("Invalid radar view bytes length");
+    }
+
+    let horizontal = decode_walls(&bytes[0..3], 12)?;
+    let vertical = decode_walls(&bytes[3..6], 12)?;
+    let cells = decode_cells(&bytes[6..11])?;
+
+    Ok(RadarView {
+        horizontal,
+        vertical,
+        cells,
+    })
+}
