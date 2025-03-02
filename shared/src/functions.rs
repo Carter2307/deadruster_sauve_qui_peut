@@ -7,6 +7,7 @@ use std::{
 use crate::{
     enums::{Message, RegisterTeamResult, RegistrationError, SubscribePlayerResult},
     structs::{RegisterTeam, SubscribePlayer},
+    radar_view::decode_radarview
 };
 
 pub fn send_message(stream: &mut TcpStream, message: &String) {
@@ -15,6 +16,7 @@ pub fn send_message(stream: &mut TcpStream, message: &String) {
     stream.write(&size.to_le_bytes()).unwrap();
     stream.write(message.as_bytes()).unwrap();
 }
+
 
 pub fn get_message(stream: &mut TcpStream) -> String {
     //Lis la réponse du server
@@ -99,10 +101,8 @@ pub fn register_player(name: &str, token: &String, server_adress: &str) {
                     SubscribePlayerResult::Ok => {
                         // Ready to play
                         loop {
-                            let mut buffer = [0; 512];
-                            let bytes_read = stream.read(&mut buffer).unwrap();
-
-                            println!("Server is sending data {}", bytes_read);
+                            let message = get_message(&mut stream);
+                            println!("Server is sending data {}", message);
                         }
                     }
 
