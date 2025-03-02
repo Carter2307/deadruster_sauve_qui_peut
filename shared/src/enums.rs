@@ -1,10 +1,7 @@
-use std::error::Error;
 
 use serde::{Deserialize, Serialize};
 
-use crate::structs::{RegisterTeam, SubscribePlayer};
-use crate::structs::{MazeData, Position};
-
+use crate::{game_engine::Direction, structs::{RegisterTeam, SubscribePlayer}};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum RegisterTeamResult {
@@ -33,13 +30,39 @@ pub enum Message {
     RegisterTeamResult(RegisterTeamResult),
     SubscribePlayer(SubscribePlayer),
     SubscribePlayerResult(SubscribePlayerResult),
-    RequestMaze,
-    MazeResponse(MazeData),
-    SolveMaze(MazeData),
-    MazeSolution(Vec<Position>),
+    RadarView(String),
+    Action(Action),
+    Challenge(Challenge),
+    ActionError(ActionError),
+    Hint(Hint),
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub enum Action {
+    MoveTo(Direction),
+    SolveChallenge { answer: String },
+}
 
+#[derive(Deserialize, Serialize, Debug)]
+pub enum ActionError {
+    CannotPassThroughWall,
+    CannotPassThroughOpponent,
+    NoRunningChallenge,
+    SolveChallengeFirst,
+    InvalidChallengeSolution,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum Challenge {
+    SecretSumModulo(u64),
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum Hint {
+    RelativeCompass { angle: f32 },
+    GridSize { columns: u32, rows: u32 },
+    Secret(u64),
+}
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum SubscribePlayerResult {
