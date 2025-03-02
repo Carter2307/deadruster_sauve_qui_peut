@@ -2,4 +2,5 @@ pub mod enums;
 pub mod structs;
 pub mod functions;
 pub mod radar_view;
-mod base64;
+pub mod base64;
+pub mod game_engine;

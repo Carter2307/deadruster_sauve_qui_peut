@@ -1,13 +1,15 @@
 use std::{
     io::{Read, Write},
     net::TcpStream,
-    thread,
 };
 
 use crate::{
-    enums::{Message, RegisterTeamResult, RegistrationError, SubscribePlayerResult},
+    enums::{
+        Action, ActionError, Challenge, Hint, Message, RegisterTeamResult, SubscribePlayerResult
+    },
+    game_engine::{Direction, GameState, GlobalMap, Player},
+    radar_view::{decode_radarview, RadarView},
     structs::{RegisterTeam, SubscribePlayer},
-    radar_view::decode_radarview
 };
 
 pub fn send_message(stream: &mut TcpStream, message: &String) {
@@ -17,10 +19,11 @@ pub fn send_message(stream: &mut TcpStream, message: &String) {
     stream.write(message.as_bytes()).unwrap();
 }
 
-
 pub fn get_message(stream: &mut TcpStream) -> String {
     //Lis la réponse du server
     let mut recieved_message_len_buffer = [0_u8; 4];
+
+    println!("{:?}",stream);
 
     //Lis la taille du message envoyer par le server
     stream.read_exact(&mut recieved_message_len_buffer).unwrap();
@@ -77,8 +80,77 @@ pub fn register_team(name: &str, server_adress: &str) -> RegisterTeamResult {
     }
 }
 
-pub fn register_player(name: &str, token: &String, server_adress: &str) {
-    let mut stream: TcpStream = connect(&server_adress);
+pub fn send_move(stream: &mut TcpStream, direction: &Direction) {
+    let action_move_message = Message::Action(Action::MoveTo(*direction));
+    print!("Move to: {:?}\n", *direction);
+    let action_move_message_stringify = serde_json::to_string(&action_move_message).unwrap();
+    send_message(stream, &action_move_message_stringify);
+}
+
+pub fn play(player: &mut Player, mut stream: &mut TcpStream, game_state: &mut GameState,  map: &mut GlobalMap) {
+    println!("\n ==== La partie a commencé ===\n");
+
+    let message = get_message(&mut stream);
+    let response: Message = serde_json::from_str(&message).unwrap();
+
+    // Si c'est un radaview
+    if let Message::RadarView(encoded_string) = &response {
+        let radar: RadarView = decode_radarview(&encoded_string).unwrap();
+
+        // Mettre à jour la carte avec les nouvelles informations
+        map.update_from_radar(&radar);
+
+        // Choisir un déplacement
+        let direction = map.next_move(Direction::Back);
+        // Envoyer le mouvement au serveur
+        send_move(&mut stream, &direction);
+        println!("Nouvelle position du joueur : {:?}\n", player.position);
+
+    }
+
+    // Si c'est un challenge
+    if let Message::Challenge(challenge) = &response {
+        println!("Challenge:{:?}\n", challenge);
+        match challenge {
+            Challenge::SecretSumModulo(modulo) => {
+                let answer = game_state.calculate_secret_sum_modulo(*modulo);
+                let action = Message::Action(Action::SolveChallenge {
+                    answer: answer.to_string(),
+                });
+                let action_message_string = serde_json::to_string(&action).unwrap();
+                print!("Action message string: {:?}", &action_message_string);
+                send_message(stream, &action_message_string);
+            }
+        }
+    }
+
+    // Si c'est un indice
+    if let Message::Hint(hint) = &response {
+        match hint {
+            Hint::Secret(secret) => {
+                game_state.update_secret(&player.name, *secret);
+                println!("Hint secret:{:?}\n", *secret);
+            },
+            Hint::RelativeCompass { angle } => {
+                print!("Relative compass {}", &angle)
+            },
+            _ => (),
+        }
+    }
+
+    // Si c'est une Action error
+    if let Message::ActionError(error) = &response {
+        match error {
+            ActionError::CannotPassThroughWall => print!("Cannot pass through wall!"),
+            ActionError::CannotPassThroughOpponent => print!("Cannot pass through opponent!"),
+            ActionError::NoRunningChallenge => print!("No Running challenge!"),
+            ActionError::SolveChallengeFirst => print!("Solve challenge first!"),
+            ActionError::InvalidChallengeSolution => print!("Invalid challenge solution"),
+        }
+    }
+}
+
+pub fn register_player(name: &str, token: &String, mut stream: &mut TcpStream) -> bool {
     print!(
         "Register player stream addr: {:?}\n",
         &stream.local_addr().unwrap().port()
@@ -99,15 +171,13 @@ pub fn register_player(name: &str, token: &String, server_adress: &str) {
             if let Message::SubscribePlayerResult(subscribe_player_result) = result {
                 match subscribe_player_result {
                     SubscribePlayerResult::Ok => {
-                        // Ready to play
-                        loop {
-                            let message = get_message(&mut stream);
-                            println!("Server is sending data {}", message);
-                        }
-                    }
+                        println!("Joueur bien enregistrée");
+                        true
+                    },
 
                     SubscribePlayerResult::Err(err) => {
                         print!("Error occur: {:?}", err);
+                        false
                     }
                 }
             } else {
@@ -117,7 +187,7 @@ pub fn register_player(name: &str, token: &String, server_adress: &str) {
         Err(error) => {
             panic!("{error}");
         }
-    };
+    }
 }
 
 pub fn connect(addr: &str) -> TcpStream {
