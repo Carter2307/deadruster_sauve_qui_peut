@@ -5,7 +5,7 @@ use std::{
 use shared::{
     enums::RegisterTeamResult,
     functions::{connect, play, register_player, register_team},
-    game_engine::{Direction, GameState, GlobalMap, Player},
+    game_engine::{GameState, GlobalMap, Player},
 };
 
 const SERVER_ADDRESS: &str = "localhost:8778";
@@ -53,6 +53,7 @@ fn main() {
     // Initialiser l'état du jeu
     let game_state = Arc::new(Mutex::new(GameState {
         team_secrets: HashMap::new(),
+        modulo: 0,
     }));
 
     let mut threads: Vec<_> = Vec::new();
@@ -62,8 +63,8 @@ fn main() {
     // Enregister des joueurs et lancer la partie
     for i in 0..max_players {
         let team_token_clone = team_token.clone();
-        let game_state_clone = Arc::clone(&game_state);
-        let map_clone = Arc::clone(&map);
+        let mut game_state_clone = Arc::clone(&game_state);
+        let mut map_clone = Arc::clone(&map);
 
         threads.push(thread::spawn(move || {
             let mut stream: TcpStream = connect(server_address);
@@ -75,8 +76,6 @@ fn main() {
             );
 
             if can_play {
-                let mut game_state = game_state_clone.lock().unwrap();
-                let mut game_map = map_clone.lock().unwrap();
 
                 let mut player = Player {
                     name: format!("Player-{}", &i),
@@ -84,8 +83,10 @@ fn main() {
                     secret: Some(0),
                 };
 
+                println!("\n ==== La partie a commencé ===\n");
+
                 loop {
-                    play(&mut player, &mut stream, &mut game_state, &mut game_map);
+                    play(&mut player, &mut stream, &mut game_state_clone, &mut map_clone);
                 }
             }
         }));
