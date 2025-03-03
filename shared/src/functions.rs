@@ -1,6 +1,6 @@
 use std::{
     io::{Read, Write},
-    net::TcpStream,
+    net::TcpStream, sync::{Arc, Mutex, MutexGuard},
 };
 
 use crate::{
@@ -87,21 +87,35 @@ pub fn send_move(stream: &mut TcpStream, direction: &Direction) {
     send_message(stream, &action_move_message_stringify);
 }
 
-pub fn play(player: &mut Player, mut stream: &mut TcpStream, game_state: &mut GameState,  map: &mut GlobalMap) {
-    println!("\n ==== La partie a commencé ===\n");
+pub fn resolve_secret_sum_challenge(stream: &mut TcpStream, game_state:&mut MutexGuard<'_, GameState>) {
+    let answer = game_state.calculate_secret_sum_modulo(game_state.modulo);
+    let action = Message::Action(Action::SolveChallenge {
+        answer: answer.to_string(),
+    });
+    let action_message_string = serde_json::to_string(&action).unwrap();
+    print!("Action message string: {:?}\n", &action_message_string);
+    send_message(stream, &action_message_string);
+}
+
+pub fn play(player: &mut Player, mut stream: &mut TcpStream, game_state_clone:&mut  Arc<Mutex<GameState>>, map_clone: &mut Arc<Mutex<GlobalMap>>) {
+    
+    let mut game_state = game_state_clone.lock().unwrap();
+
 
     let message = get_message(&mut stream);
     let response: Message = serde_json::from_str(&message).unwrap();
 
-    // Si c'est un radaview
+    // Si c'est une radaview
     if let Message::RadarView(encoded_string) = &response {
+        println!("\n ==== Reception d'une radaview ===\n");
+        let mut map = map_clone.lock().unwrap();
         let radar: RadarView = decode_radarview(&encoded_string).unwrap();
 
         // Mettre à jour la carte avec les nouvelles informations
         map.update_from_radar(&radar);
 
         // Choisir un déplacement
-        let direction = map.next_move(Direction::Back);
+        let direction = map.next_move(Direction::Front);
         // Envoyer le mouvement au serveur
         send_move(&mut stream, &direction);
         println!("Nouvelle position du joueur : {:?}\n", player.position);
@@ -110,29 +124,26 @@ pub fn play(player: &mut Player, mut stream: &mut TcpStream, game_state: &mut Ga
 
     // Si c'est un challenge
     if let Message::Challenge(challenge) = &response {
-        println!("Challenge:{:?}\n", challenge);
+        println!("\n === Reception d'un Challenge {:?} ===\n", challenge);
         match challenge {
             Challenge::SecretSumModulo(modulo) => {
-                let answer = game_state.calculate_secret_sum_modulo(*modulo);
-                let action = Message::Action(Action::SolveChallenge {
-                    answer: answer.to_string(),
-                });
-                let action_message_string = serde_json::to_string(&action).unwrap();
-                print!("Action message string: {:?}", &action_message_string);
-                send_message(stream, &action_message_string);
+                // Stocker le modulo
+                game_state.modulo = *modulo;
+                resolve_secret_sum_challenge(stream, &mut game_state);
             }
         }
     }
 
     // Si c'est un indice
     if let Message::Hint(hint) = &response {
+        println!("\n ==== Reception d'un indice ===\n");
         match hint {
             Hint::Secret(secret) => {
                 game_state.update_secret(&player.name, *secret);
                 println!("Hint secret:{:?}\n", *secret);
             },
             Hint::RelativeCompass { angle } => {
-                print!("Relative compass {}", &angle)
+                print!("Relative compass {}", &angle);
             },
             _ => (),
         }
@@ -140,12 +151,17 @@ pub fn play(player: &mut Player, mut stream: &mut TcpStream, game_state: &mut Ga
 
     // Si c'est une Action error
     if let Message::ActionError(error) = &response {
+        println!("\n ==== Reception d'une action error {:?} ===\n", error);
+
         match error {
             ActionError::CannotPassThroughWall => print!("Cannot pass through wall!"),
             ActionError::CannotPassThroughOpponent => print!("Cannot pass through opponent!"),
             ActionError::NoRunningChallenge => print!("No Running challenge!"),
             ActionError::SolveChallengeFirst => print!("Solve challenge first!"),
-            ActionError::InvalidChallengeSolution => print!("Invalid challenge solution"),
+            ActionError::InvalidChallengeSolution => {
+                println!("Invalid challenge solution");
+                resolve_secret_sum_challenge(stream, &mut game_state);
+            },
         }
     }
 }
