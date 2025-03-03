@@ -53,6 +53,43 @@ Un client Rust pour explorer un labyrinthe généré par un serveur, résoudre d
 
 ---
 
+## 🧪 Tests Unitaires
+
+Plusieurs fonctions critiques sont couvertes par des tests unitaires pour garantir leur fiabilité :
+
+### Encodage/décodage Base64 (`shared/src/base64.rs`)
+- Vérifie l'encodage/décodage de chaînes simples (ex: `"Hello"` → `"sgvSBg8"`)
+- Gère les cas limites (valeurs 0-255, padding)
+- Rejette les caractères invalides
+
+**Lancer les tests** :
+```bash
+cd ./shared
+cargo test -- --test-threads=1
+```
+
+### Décodage des RadarView (`shared/src/radar_view.rs`)
+- Valide le décodage d'une vue radar encodée (ex: `"ieysGjGO8papd/a"`)
+- Vérifie la cohérence mur/cellule après un round-trip (encodage → décodage)
+
+**Lancer les tests** :
+```bash
+cd ./shared
+cargo test --test radar_tests
+```
+
+### Exemple de sortie réussie
+```
+running 4 tests
+test base64::tests::test_decode_invalid ... ok
+test base64::tests::test_encode ... ok
+test base64::tests::test_all_case ... ok
+test base64::tests::test_decode ... ok
+
+running 1 test
+test radar_view::tests::test_decode_encode ... ok
+```
+
 ## 🧩 Structure du projet
 ```  
 .  
