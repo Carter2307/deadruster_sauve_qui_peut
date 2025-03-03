@@ -1,7 +1,7 @@
 use rand::{distr::Alphanumeric, rng, Rng};
 use serde::{Deserialize, Serialize};
 use shared::{
-    enums::{Action, Message, RegisterTeamResult, RegistrationError, SubscribePlayerResult}, functions::{get_message, send_message}, game_engine::Player, structs::SubscribePlayer
+    enums::{Action, Message, RegisterTeamResult, RegistrationError, SubscribePlayerResult}, functions::{get_message, send_message}, game_engine::{Direction, Player}, structs::SubscribePlayer
 };
 use std::{
     collections::HashMap,
@@ -85,6 +85,7 @@ impl Controller {
                     position: (0, 0),
                     name: player.name.clone(),
                     secret: None,
+                    direction: Direction::Front
                 });
             }
         }

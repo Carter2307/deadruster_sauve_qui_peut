@@ -5,7 +5,7 @@ use std::{
 use shared::{
     enums::RegisterTeamResult,
     functions::{connect, play, register_player, register_team},
-    game_engine::{GameState, GlobalMap, Player},
+    game_engine::{Direction, GameState, GlobalMap, Player},
 };
 
 const SERVER_ADDRESS: &str = "localhost:8778";
@@ -81,6 +81,7 @@ fn main() {
                     name: format!("Player-{}", &i),
                     position: (0, 0),
                     secret: Some(0),
+                    direction: Direction::Front
                 };
 
                 println!("\n ==== La partie a commencé ===\n");

@@ -115,10 +115,16 @@ pub fn play(player: &mut Player, mut stream: &mut TcpStream, game_state_clone:&m
         map.update_from_radar(&radar);
 
         // Choisir un déplacement
-        let direction = map.next_move(Direction::Front);
+        let direction = map.next_move(map.player_direction);
+
+        map.player_direction = direction; 
+
+        // Mettre à jour la position du joueur
+        map.move_player(direction);
+
+
         // Envoyer le mouvement au serveur
         send_move(&mut stream, &direction);
-        println!("Nouvelle position du joueur : {:?}\n", player.position);
 
     }
 
