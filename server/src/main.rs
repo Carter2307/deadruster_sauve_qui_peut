@@ -1,18 +1,20 @@
 use rand::{distr::Alphanumeric, rng, Rng};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize}; // Dé/Sérialisation JSON
 use shared::{
     enums::{Action, Message, RegisterTeamResult, RegistrationError, SubscribePlayerResult}, functions::{get_message, send_message}, game_engine::{Direction, Player}, structs::SubscribePlayer
 };
 use std::{
-    collections::HashMap,
-    net::{TcpListener, TcpStream},
-    sync::{Arc, Mutex},
-    thread,
+    collections::HashMap, // Pour stocker les équipes
+    net::{TcpListener, TcpStream}, // outils pour la communication réseau
+    sync::{Arc, Mutex}, // Gestion des accès concurrent aux données
+    thread, // Gérer plusieurs connexions en parallèle
 };
 
+// Fournit des méthodes pour convertir des objets en JSON et inversement
 pub struct Request;
 
 impl Request {
+    // Convertit chaîne JSON => objet Rust
     pub fn from_string<'a, T: Serialize + Deserialize<'a>>(text: &'a str) -> Option<T> {
         match serde_json::from_str(text) {
             Ok(value) => Some(value),
@@ -23,6 +25,7 @@ impl Request {
         }
     }
 
+    // Convertit un objet Rust en chaîne JSON
     fn to_serde_string<T: Serialize>(element: T) -> Result<String, serde_json::Error> {
         match serde_json::to_string(&element) {
             Ok(value) => Ok(value),
@@ -34,22 +37,29 @@ impl Request {
     }
 }
 
+// Le serveur écoute sur localhost port 8888
 const SERVER_PORT: &str = "localhost:8888";
 
+// Controller: Gestion des équipes et joueurs
 pub struct Controller {
+    // Stock les équipes
     pub teams: HashMap<String, Team>,
+    // nb joueur attendu par équipe
     pub expected_players: u64,
 }
 
+// Fournit des services réseau pour envoyer des messages JSON aux clients
 pub struct Services;
 
 impl Services {
+
+    // Enregistrement d'une équipe
     pub fn register_team_service(
         &self,
         register_result: RegisterTeamResult,
         stream: &mut TcpStream,
     ) {
-        // Transformer le message en string
+        // Transformer le message JSON => string
         if let Ok(register_team_string) =
             serde_json::to_string(&Message::RegisterTeamResult(register_result))
         {
@@ -58,6 +68,7 @@ impl Services {
         }
     }
 
+    // Enregistre un joueur auprès du serveur
     pub fn subscribe_player_service(
         &self,
         subscribe_player_result: SubscribePlayerResult,
@@ -67,17 +78,21 @@ impl Services {
         if let Ok(subscribe_player_string) =
             serde_json::to_string(&Message::SubscribePlayerResult(subscribe_player_result))
         {
-            // Envoyer le message
+            // Envoyer le message au client
             send_message(stream, &subscribe_player_string);
         }
     }
 }
 
+// Controller: Gestion des équipes et joueurs
 impl Controller {
+
+    // Sauvegarde des équipes et joueurs
     pub fn save_team(&mut self, team: &Team) {
         self.teams.insert(team.clone().name, team.clone());
     }
 
+    // Ajoute une équipe dans le Hashmap
     pub fn save_player(&mut self, player: &SubscribePlayer) {
         for (_, team) in self.teams.iter_mut() {
             if team.token == player.registration_token {
@@ -91,6 +106,7 @@ impl Controller {
         }
     }
 
+    // Enregistrer une équipe
     pub fn register_team(&mut self, team: Team) -> RegisterTeamResult {
         // Vérifier si le nom de l'équipe n'est pas vide => InvalidName
         if team.name.len() < 3 {
@@ -112,6 +128,7 @@ impl Controller {
         }
     }
 
+    // Enregistrement d'un joueur
     pub fn register_player(
         &mut self,
         player_to_subscribe: &SubscribePlayer,
@@ -159,7 +176,6 @@ impl Controller {
         // Liste définié des vues radars à envoyé
         let radarview_sample = "ieysGjGO8papd/a";
 
-        //if count == 3 {break};
         // Envoyer un radarview
         let radar_string =
             Request::to_serde_string(Message::RadarView(String::from(radarview_sample))).unwrap();
@@ -181,6 +197,7 @@ impl Controller {
     }
 }
 
+// Une équipe de joueurs
 #[derive(Debug, Serialize, Clone)]
 pub struct Team {
     players: Vec<Player>,
@@ -199,6 +216,7 @@ pub fn gen_team_tokem() -> String {
     rand_string
 }
 
+// Connexion bien établie avec le client
 pub fn handle_connection(
     stream: &mut TcpStream,
     controller: &mut Controller,
@@ -233,30 +251,55 @@ pub fn handle_connection(
     }
 
     // Démarrer le jeu si toute les équipes ont trois joueurs
-    print!("\n === La partie démarre ===\n");
-    loop {
-        controller.start_game(stream);
+    let mut is_full = true;
+
+    for (_, team) in &controller.teams {
+        if (team.players.len() as u64) != controller.expected_players {
+            is_full = false;
+            break;
+        }
+    }
+
+
+    if is_full {
+        print!("\n === La partie démarre ===\n");
+        loop {
+            controller.start_game(stream);
+        }
     }
 }
 
 fn main() {
     // Initialiser le server
     let listener = TcpListener::bind(SERVER_PORT);
+    // Arc & Mutex pour permettre un accès concurrent à la structure Controller
+    // Mutex: protège les données quand plusieurs users accèdent au serveur en même temps.
+    // Arc: permet de partager ces objets entre plusieurs threads (= tâches parallèles)
     let controller = Arc::new(Mutex::new(Controller {
         teams: HashMap::new(),
         expected_players: 3,
     }));
 
+
+    // Accepte les connexions entrantes et démarre un thread pour chaque client
     match listener {
-        Ok(tcp_listener) => {
+        Ok(tcp_listener) => { // Ok = le server s'est bien lancé
+            // boucle infinie qui attend qu'un nouvel user se connecte
             for stream in tcp_listener.incoming() {
+
+                // Créer une référence à l'objet controller pour pouvoir le partager avec plusieurs clients
                 let controller_clone = Arc::clone(&controller);
 
                 match stream {
-                    Ok(mut stream) => {
+                    // A - Si tout va bien, stream contient la connexion de l'utilisateur
+                    Ok(mut stream) => { // mut car stream peut être modifié (= connexion active)
+
                         // Gérer les connections/requêtes au server
+                        // Créer un nouveau thread pour gérer ce client sans bloquer le serveur
                         thread::spawn(move || {
+                            // Récupère les données de controller et empêche les autres thread de les modifier tant qu'on travaille dessus
                             let mut controller = controller_clone.lock().unwrap();
+                            // struct service: // Fournit des services réseau pour envoyer des messages JSON aux clients
                             let mut services = Services;
                             handle_connection(&mut stream, &mut controller, &mut services);
                         });
